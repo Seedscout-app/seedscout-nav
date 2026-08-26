@@ -1,0 +1,152 @@
+name: CI
+
+# Seedscout Nav correctness gates. Each job guards a different class of defect:
+#
+#   build        the Gradle build succeeds and produces a mod JAR.
+#   test         the Gradle test suite (if any) passes.
+#   hygiene      writing style gate (no em/en dashes).
+#   wire-pins    shared/nav_protocol.md and fixtures/wire/*.json match the sha256
+#                pinned in fixtures/wire/CHECKSUMS.sha256, so an edit to either that
+#                forgets to update the checksum manifest fails here before the
+#                wire-level content assertions in :test even run. This is the
+#                mod-side half of the cross-repo anti-drift mechanism; the app
+#                repository's app/test/nav_wire_fixture_test.dart hardcodes the SAME
+#                sha256 values against its own copies, so an edit to only one
+#                repository's copy of the protocol document or a fixture fails red in
+#                that repository without needing any cross-repo access in CI.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wire-pins:
+    name: wire pins (shared/nav_protocol.md + fixtures/wire sha256)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # fixtures/wire/CHECKSUMS.sha256 pins the exact bytes of the mirrored protocol
+      # document and every wire fixture. src/test/java/.../wire/WireFixtureTest.java
+      # independently hardcodes the same hashes as Java literals (so :test itself
+      # also fails on drift), and app/test/nav_wire_fixture_test.dart in the app
+      # repository hardcodes them again as Dart literals against its own copies.
+      # This step is the cheapest of the three: it fails before a single line of
+      # Gradle or Dart runs if this repository's own files drifted from its own
+      # manifest.
+      - name: shared/nav_protocol.md and fixtures/wire/*.json match their pinned sha256
+        run: sha256sum -c fixtures/wire/CHECKSUMS.sha256
+
+  build:
+    name: build (Gradle)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: gradle build
+        run: ./gradlew clean build
+
+  test:
+    name: test (Gradle)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: gradle test
+        run: ./gradlew test
+
+  hygiene:
+    name: hygiene (em dash + secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0, not the default shallow clone: the secret scan below
+      # greps full git history, not just the checked-out tip, per
+      # best practices for credential detection.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # check-no-emdash.mjs enumerates tracked files with `git ls-files`, so it
+      # needs the checkout to be a real repository, which actions/checkout gives.
+      - name: No em dashes in authored source
+        run: node scripts/check-no-emdash.mjs
+
+      # Straightforward grep for known secret-key shapes across the tracked
+      # working tree AND every commit in the full history (not just HEAD, so
+      # a key that was committed and later deleted still fails this gate).
+      # No external action, no license, no network call: the pattern list
+      # lives right here so it is one place to audit or extend. Covers the
+      # key patterns commonly found in Java/Gradle projects: AWS access keys,
+      # PEM private key blocks, GitHub tokens, and API keys.
+      - name: Secret scan (working tree + full git history)
+        shell: bash
+        run: |
+          patterns='AKIA[0-9A-Z]{16}|-----BEGIN (RSA |EC |OPENSSH |DSA |ENCRYPTED )?PRIVATE KEY-----|-----BEGIN PGP PRIVATE KEY BLOCK-{5}|gh[pousr]_[A-Za-z0-9]{36,}|xox[baprs]-[A-Za-z0-9-]{10,}'
+
+          hits=0
+
+          echo "Scanning tracked working-tree files..."
+          tree_raw="$(mktemp)"
+          tree_err="$(mktemp)"
+          tree_status=0
+          git grep --no-color -InE -e "$patterns" >"$tree_raw" 2>"$tree_err" || tree_status=$?
+          if [ "$tree_status" -gt 1 ]; then
+            echo "Working-tree scan failed (git grep exited $tree_status)." >&2
+            cat "$tree_err" >&2
+            exit 1
+          fi
+          if [ -s "$tree_raw" ]; then
+            cat "$tree_raw"
+            hits=1
+          fi
+          rm -f "$tree_raw" "$tree_err"
+
+          echo "Scanning full git history (all branches, every commit's diff)..."
+          log_raw="$(mktemp)"
+          log_err="$(mktemp)"
+          log_status=0
+          git log --all -p >"$log_raw" 2>"$log_err" || log_status=$?
+          if [ "$log_status" -ne 0 ]; then
+            echo "git log failed (exit $log_status)." >&2
+            cat "$log_err" >&2
+            exit 1
+          fi
+          grep_raw="$(mktemp)"
+          grep_err="$(mktemp)"
+          grep_status=0
+          grep -InE -- "$patterns" "$log_raw" >"$grep_raw" 2>"$grep_err" || grep_status=$?
+          if [ "$grep_status" -gt 1 ]; then
+            echo "History scan failed (grep exited $grep_status)." >&2
+            cat "$grep_err" >&2
+            exit 1
+          fi
+          if [ -s "$grep_raw" ]; then
+            cat "$grep_raw"
+            hits=1
+          fi
+          rm -f "$log_raw" "$log_err" "$grep_raw" "$grep_err"
+
+          if [ "$hits" -ne 0 ]; then
+            echo "Possible secret key pattern found above. Investigate before merging." >&2
+            exit 1
+          fi
+          echo "No secret-key patterns found in tracked files or git history."

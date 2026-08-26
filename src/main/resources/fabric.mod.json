@@ -1,0 +1,29 @@
+{
+    "schemaVersion": 1,
+    "id": "seedscout-nav",
+    "version": "${version}",
+    "name": "Seedscout Nav",
+    "description": "Pair your Minecraft world with the Seedscout Android app. The app reads your world seed and player position, and can draw a route on the ground to guide you toward features.",
+    "authors": [
+        "Seedscout"
+    ],
+    "contact": {
+        "homepage": "https://seedscout.app",
+        "issues": "https://github.com/Seedscout/seedscout-nav",
+        "email": "support@seedscout.app"
+    },
+    "license": "Apache-2.0",
+    "icon": "assets/seedscout-nav/icon.png",
+    "environment": "client",
+    "entrypoints": {
+        "client": [
+            "app.seedscout.nav.SeedscoutNavClient"
+        ]
+    },
+    "depends": {
+        "fabricloader": ">=0.19.3",
+        "minecraft": ">=26.2 <26.3",
+        "java": ">=25",
+        "fabric-api": "*"
+    }
+}
