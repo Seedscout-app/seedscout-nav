@@ -29,9 +29,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * The pairing listener and, once a player confirms, the linked session. One instance is one
  * pairing window from {@code shared/nav_protocol.md} section 3: created on demand when the
  * in-game pairing screen opens, and destroyed on any of the four events section 3 and the
- * task brief require: the window expiring, the session ending, a world change, or client
- * shutdown. There is no reconnect and no second window; a fresh QR code means a fresh
- * {@link LinkServer}.
+ * task brief require: the window expiring, the session ending, the player leaving the world,
+ * or client shutdown. There is no reconnect and no second window; a fresh QR code means a
+ * fresh {@link LinkServer}.
+ *
+ * <p>A CLIENT LEVEL CHANGE IS NOT ONE OF THOSE FOUR. A nether portal changes the level without
+ * the player going anywhere, so it survives the link and at most triggers
+ * {@link #resendWorld()}; see {@link app.seedscout.nav.protocol.SaveIdentity}.
  *
  * <p>Lifecycle, modelled explicitly as {@link State} because "does not go live until the
  * player confirms" (the task brief) is a real state a caller must be able to observe and
@@ -247,6 +251,27 @@ public final class LinkServer implements AutoCloseable {
             startIdleWatch();
         }
         session.start();
+    }
+
+    /**
+     * Driven by the client layer when the loaded save changed under a live link: rereads
+     * {@link WorldSource#worldSnapshot()} and sends a fresh {@code world} frame. No-op in every
+     * state but {@link State#LINKED}, since there is no one to send it to.
+     *
+     * <p>The reread happens on the sending side of this call rather than here, so the caller
+     * never has to hold a snapshot across the hand-off.
+     */
+    public void resendWorld() {
+        LinkSession current;
+        synchronized (lock) {
+            if (state != State.LINKED) {
+                return;
+            }
+            current = session;
+        }
+        if (current != null) {
+            current.resendWorld();
+        }
     }
 
     /** Driven by the client layer if the player declines the confirmation prompt. */

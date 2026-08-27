@@ -16,9 +16,14 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * A single linked session (section 4): sends {@code world} once, then {@code pos} on the
+ * A single linked session (section 4): sends {@code world} on confirm, then {@code pos} on the
  * throttle from {@link PosThrottle}, and applies whatever {@code route} or {@code clear}
  * frames arrive to a {@link RenderSink}.
+ *
+ * <p>{@code world} is sent once per LOADED SAVE, not once per session. It is resent by
+ * {@link #resendWorld()} if the save changes under a live link, which is what keeps a nether
+ * portal (same save, new dimension, no resend) from being confused with a hot-swap to a
+ * different save. See {@link app.seedscout.nav.protocol.SaveIdentity}.
  *
  * <p>Free of every Minecraft rendering call, as required: it reads game state only through
  * {@link WorldSource} and hands decoded frames only to {@link RenderSink}, both implemented
@@ -105,6 +110,23 @@ final class LinkSession {
             case RouteFrame route -> renderSink.showRoute(route);
             case ClearFrame clear -> renderSink.clearRoute();
         }
+    }
+
+    /**
+     * Sends a fresh {@code world} frame mid-session, because the loaded save changed under the
+     * link. See {@link app.seedscout.nav.protocol.SaveIdentity} for when this is and is not
+     * called; the short version is never for a dimension change, only for a genuinely different
+     * save or a save this client could not identify.
+     *
+     * <p>Safe for the app to receive: {@code app/lib/data/nav_link_service.dart} documents a
+     * second {@code world} while linked as overwriting the stored one, which is what makes this
+     * a resend rather than a protocol violation.
+     */
+    void resendWorld() {
+        if (ended) {
+            return;
+        }
+        connection.sendText(NavCodec.encode(worldSource.worldSnapshot()));
     }
 
     /** Sends {@code unlink} with {@code reason} and closes the socket. Idempotent. */

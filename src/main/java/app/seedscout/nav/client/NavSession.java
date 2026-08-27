@@ -11,9 +11,15 @@ import java.io.IOException;
 /**
  * Owns the one {@link LinkServer} instance that can exist at a time, and the four teardown
  * triggers the task brief lists: the pairing window closing on its own, the player quitting
- * the confirm prompt, a world change, and client shutdown. {@link SeedscoutNavClientHooks}
- * wires the Fabric-side events into this; nothing in this class touches a Fabric or
- * Minecraft-lifecycle API directly, so it stays easy to reason about independently of them.
+ * the confirm prompt, the player leaving the world, and client shutdown.
+ * {@link SeedscoutNavClientHooks} wires the Fabric-side events into this; nothing in this class
+ * touches a Fabric or Minecraft-lifecycle API directly, so it stays easy to reason about
+ * independently of them.
+ *
+ * <p>"Leaving the world" means the play connection ending, NOT a client level change. A level
+ * change is a nether portal as often as it is anything else, and it is now handled by
+ * {@link #resendWorld()} rather than by teardown; see
+ * {@link app.seedscout.nav.protocol.SaveIdentity}.
  */
 public final class NavSession {
 
@@ -48,6 +54,20 @@ public final class NavSession {
 
     synchronized LinkServer current() {
         return server;
+    }
+
+    /**
+     * Resends the {@code world} frame on the live link, because the loaded save changed under
+     * it. No-op unless a session is actually linked, so the caller does not have to know.
+     *
+     * <p>This is NOT a teardown trigger and deliberately does not touch {@link #server}: the
+     * whole point of {@link app.seedscout.nav.protocol.SaveIdentity} is that a world change is
+     * now something the link survives rather than something that kills it.
+     */
+    public synchronized void resendWorld() {
+        if (server != null) {
+            server.resendWorld();
+        }
     }
 
     /** Ends whatever session or pending pairing is open, for any of the four teardown triggers. */

@@ -292,6 +292,83 @@ class LinkServerTest {
         waitFor(() -> sink.clears > 0, "clear to be received");
     }
 
+    /**
+     * The transport half of the nether-portal fix: a save change under a live link puts a
+     * SECOND {@code world} frame on the wire, freshly reread from the {@link WorldSource}, and
+     * the link stays LINKED through it.
+     *
+     * <p>This proves the resend path carries bytes. It does NOT prove a real portal keeps a real
+     * link alive: whether {@code resendWorld()} is called at the right moments lives in
+     * {@code SeedscoutNavClientHooks} and {@code app.seedscout.nav.protocol.SaveIdentity},
+     * where the discrimination is unit tested separately, and neither can be exercised against
+     * a running game here.
+     */
+    @Test
+    @Timeout(15)
+    void resendWorldSendsASecondWorldFrameAndKeepsTheLink() throws Exception {
+        StubWorldSource world = new StubWorldSource();
+        RecordingRenderSink sink = new RecordingRenderSink();
+        LinkServer server = open(world, sink);
+        String token = tokenFrom(server);
+
+        CollectingListener listener = new CollectingListener();
+        connect(server, token, listener);
+
+        awaitState(server, LinkServer.State.AWAITING_CONFIRMATION);
+        server.confirm();
+        awaitState(server, LinkServer.State.LINKED);
+        waitFor(() -> countWorldFrames(listener) >= 1, "the first world frame");
+
+        // A different save is now loaded under the link.
+        world.world = new WorldSnapshot(
+                WorldSnapshot.EDITION_JAVA, "1.21.11", "overworld",
+                WorldSnapshot.seedString(42L), 8, -8);
+        server.resendWorld();
+
+        waitFor(() -> countWorldFrames(listener) >= 2, "the resent world frame");
+        String resent = listener.messages.stream()
+                .filter(m -> m.contains("\"type\":\"world\""))
+                .reduce((first, second) -> second)
+                .orElseThrow();
+        assertTrue(resent.contains("\"seed\":\"42\""),
+                "the resend must reread the WorldSource, not replay the frame sent at confirm: "
+                        + resent);
+        assertEquals(LinkServer.State.LINKED, server.state(),
+                "a save change must not end the session; that was the portal bug");
+    }
+
+    @Test
+    @Timeout(15)
+    void resendWorldIsANoOpBeforeConfirmAndAfterClose() throws Exception {
+        StubWorldSource world = new StubWorldSource();
+        RecordingRenderSink sink = new RecordingRenderSink();
+        LinkServer server = open(world, sink);
+        String token = tokenFrom(server);
+
+        // LISTENING: nothing to send to, and the pairing window must survive being asked.
+        server.resendWorld();
+        assertEquals(LinkServer.State.LISTENING, server.state());
+
+        CollectingListener listener = new CollectingListener();
+        connect(server, token, listener);
+        awaitState(server, LinkServer.State.AWAITING_CONFIRMATION);
+
+        // AWAITING_CONFIRMATION: the player has not confirmed, so no world frame exists yet.
+        server.resendWorld();
+        assertEquals(LinkServer.State.AWAITING_CONFIRMATION, server.state());
+        assertEquals(0, countWorldFrames(listener),
+                "a world frame must never precede the player's confirmation");
+
+        server.close();
+        awaitState(server, LinkServer.State.CLOSED);
+        server.resendWorld();
+        assertEquals(LinkServer.State.CLOSED, server.state());
+    }
+
+    private static long countWorldFrames(CollectingListener listener) {
+        return listener.messages.stream().filter(m -> m.contains("\"type\":\"world\"")).count();
+    }
+
     /** True if an {@link IOException} appears anywhere in the cause chain of {@code t}. */
     private static boolean chainContainsIOException(Throwable t) {
         return chainContains(t, IOException.class);

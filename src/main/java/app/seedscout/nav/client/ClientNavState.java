@@ -4,16 +4,21 @@ import app.seedscout.nav.link.RenderSink;
 import app.seedscout.nav.link.WorldSource;
 import app.seedscout.nav.protocol.PlayerPosition;
 import app.seedscout.nav.protocol.RouteFrame;
+import app.seedscout.nav.protocol.SaveIdentity;
 import app.seedscout.nav.protocol.WorldSnapshot;
 
 import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.storage.LevelResource;
+
+import java.nio.file.Path;
 
 /**
  * The single bridge between live Minecraft state and the {@code link} package's two narrow
@@ -39,11 +44,18 @@ public final class ClientNavState implements WorldSource, RenderSink {
 
     private volatile Snapshot snapshot;
     private volatile RouteFrame currentRoute;
+    private volatile SaveIdentity lastSentSaveIdentity;
 
     private ClientNavState() {
     }
 
-    /** Everything the link layer can ask for about the player and world, as of one tick. */
+    /**
+     * Everything the link layer can ask for about the player and world, as of one tick.
+     *
+     * <p>{@code saveIdentity} is captured here, on the game thread, in the same pass that reads
+     * the seed, so the identity and the {@link WorldSnapshot} built from this snapshot can never
+     * describe two different saves.
+     */
     public record Snapshot(
             String dimension,
             double x,
@@ -53,7 +65,8 @@ public final class ClientNavState implements WorldSource, RenderSink {
             String seed,
             String mcVersion,
             int spawnX,
-            int spawnZ) {
+            int spawnZ,
+            SaveIdentity saveIdentity) {
     }
 
     /** Called once per client tick, from the game thread only. See the class documentation. */
@@ -77,7 +90,38 @@ public final class ClientNavState implements WorldSource, RenderSink {
                 seed,
                 SharedConstants.getCurrentVersion().name(),
                 spawn.getX(),
-                spawn.getZ());
+                spawn.getZ(),
+                readSaveIdentity(mc, seed));
+    }
+
+    /**
+     * Which save is loaded, for {@link SaveIdentity#requiresWorldResend}. Every failure to read
+     * one of the parts answers {@link SaveIdentity#UNKNOWN}, which that method treats as
+     * "resend": see its documentation for why an unreadable identity must fail towards a
+     * redundant frame rather than towards a stale map.
+     *
+     * <p>Deliberately reads nothing dimension-dependent, so a nether portal produces an
+     * identical value and the link survives it.
+     */
+    private static SaveIdentity readSaveIdentity(Minecraft mc, String seed) {
+        if (mc.hasSingleplayerServer()) {
+            IntegratedServer server = mc.getSingleplayerServer();
+            if (server == null) {
+                return SaveIdentity.UNKNOWN;
+            }
+            Path root;
+            try {
+                root = server.getWorldPath(LevelResource.ROOT);
+            } catch (RuntimeException e) {
+                return SaveIdentity.UNKNOWN;
+            }
+            // The save directory, which stays in this process: it is never logged, never put on
+            // the wire, and never rendered, so the absolute form is used because it is the more
+            // exact discriminator, not the prettier one.
+            return root == null ? SaveIdentity.UNKNOWN : SaveIdentity.singleplayer(root.toString(), seed);
+        }
+        ServerData current = mc.getCurrentServer();
+        return current == null ? SaveIdentity.UNKNOWN : SaveIdentity.multiplayer(current.ip);
     }
 
     /**
@@ -104,6 +148,14 @@ public final class ClientNavState implements WorldSource, RenderSink {
     // WorldSource
     // -----------------------------------------------------------------
 
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Also records which save the returned frame describes. This method is called at exactly
+     * the two moments a {@code world} frame goes out (the player confirming pairing, and a
+     * resend after the loaded save changed), so it is the one honest place to stamp "this is
+     * what the app was last told", which {@link #lastSentSaveIdentity()} then compares against.
+     */
     @Override
     public WorldSnapshot worldSnapshot() {
         Snapshot s = snapshot;
@@ -111,8 +163,10 @@ public final class ClientNavState implements WorldSource, RenderSink {
             // confirm() only ever runs while a session is live in a loaded world, so this is
             // a defensive fallback rather than an expected path: report "no map" rather than
             // fail the confirm outright.
+            lastSentSaveIdentity = SaveIdentity.UNKNOWN;
             return new WorldSnapshot(WorldSnapshot.EDITION_JAVA, "unknown", "unknown", null, 0, 0);
         }
+        lastSentSaveIdentity = s.saveIdentity();
         return new WorldSnapshot(
                 WorldSnapshot.EDITION_JAVA, s.mcVersion(), s.dimension(), s.seed(), s.spawnX(), s.spawnZ());
     }
@@ -156,5 +210,15 @@ public final class ClientNavState implements WorldSource, RenderSink {
     /** Read by {@link app.seedscout.nav.client.render.RouteRenderer} every client tick. */
     public Snapshot currentSnapshot() {
         return snapshot;
+    }
+
+    /**
+     * The save described by the most recent {@link #worldSnapshot()}, or null if no
+     * {@code world} frame has ever been built. Written on a link thread and read on the game
+     * thread by {@link SeedscoutNavClientHooks}, hence volatile, the same publication the two
+     * fields above use.
+     */
+    public SaveIdentity lastSentSaveIdentity() {
+        return lastSentSaveIdentity;
     }
 }

@@ -48,39 +48,92 @@ import static org.junit.jupiter.api.Assertions.fail;
  * runtime "Fabric actually initialized the mod" check. It is intentionally cheap and honest
  * about that limit, per the task brief's guidance to prefer a real, admitted-weak check over
  * an overstated one.
+ *
+ * <p>A second test applies the same idea one level down, to
+ * {@code SeedscoutNavClientHooks} itself, guarding the two Fabric events whose roles were
+ * swapped by the nether-portal fix. The same limits apply to it.
  */
 class ClientEntrypointWiringTest {
 
     private static final String ENTRYPOINT_CLASS_RESOURCE =
             "app/seedscout/nav/SeedscoutNavClient.class";
+    private static final String HOOKS_CLASS_RESOURCE =
+            "app/seedscout/nav/client/SeedscoutNavClientHooks.class";
     private static final String HOOKS_INTERNAL_NAME =
             "app/seedscout/nav/client/SeedscoutNavClientHooks";
     private static final String HOOKS_INIT_METHOD = "init";
 
+    private static final int TAG_FIELDREF = 9;
+    private static final int TAG_METHODREF = 10;
+    private static final int TAG_INTERFACE_METHODREF = 11;
+
     @Test
     void onInitializeClientEntrypointReferencesHooksInit() throws IOException {
-        byte[] classBytes = readEntrypointClassBytes();
-        List<MethodRef> methodRefs = parseMethodRefs(classBytes);
+        byte[] classBytes = readClassBytes(ENTRYPOINT_CLASS_RESOURCE);
+        List<MemberRef> refs = parseMemberRefs(classBytes, ENTRYPOINT_CLASS_RESOURCE);
 
-        boolean callsHooksInit = methodRefs.stream()
-                .anyMatch(ref -> ref.ownerInternalName.equals(HOOKS_INTERNAL_NAME)
-                        && ref.methodName.equals(HOOKS_INIT_METHOD));
+        boolean callsHooksInit = refs.stream()
+                .anyMatch(ref -> ref.tag != TAG_FIELDREF
+                        && ref.ownerInternalName.equals(HOOKS_INTERNAL_NAME)
+                        && ref.memberName.equals(HOOKS_INIT_METHOD));
 
         assertTrue(callsHooksInit,
                 "SeedscoutNavClient.class must contain a compiled call to "
                         + HOOKS_INTERNAL_NAME + "." + HOOKS_INIT_METHOD
-                        + "() -- found method refs: " + methodRefs
+                        + "() -- found member refs: " + refs
                         + ". Without this call the mod's fabric.mod.json client entrypoint "
                         + "never wires the keybind/HUD/teardown hooks and the shipped jar "
                         + "does nothing at runtime, even though it compiles and other tests "
                         + "pass.");
     }
 
-    private static byte[] readEntrypointClassBytes() throws IOException {
+    /**
+     * The same "is the wiring line actually there" check, one level down, for the two events
+     * whose roles were swapped when the portal bug was fixed. A nether portal used to end the
+     * nav session because {@code AFTER_CLIENT_LEVEL_CHANGE} was the teardown trigger; the
+     * teardown trigger is now {@code ClientPlayConnectionEvents.DISCONNECT}. Both fields must be
+     * referenced by the hooks class, because dropping either one is a silent regression: drop
+     * DISCONNECT and the link outlives the world it belongs to, drop AFTER_CLIENT_LEVEL_CHANGE
+     * and a real save swap never resends the world frame.
+     *
+     * <p>Same limits as the test above: this proves the constant-pool reference exists in this
+     * class, not that Fabric dispatches the event or that the registered lambda does the right
+     * thing at runtime.
+     */
+    @Test
+    void hooksReferenceBothTheDisconnectAndLevelChangeEvents() throws IOException {
+        byte[] classBytes = readClassBytes(HOOKS_CLASS_RESOURCE);
+        List<MemberRef> refs = parseMemberRefs(classBytes, HOOKS_CLASS_RESOURCE);
+
+        assertTrue(referencesField(refs,
+                        "net/fabricmc/fabric/api/client/networking/v1/ClientPlayConnectionEvents",
+                        "DISCONNECT"),
+                "SeedscoutNavClientHooks must register ClientPlayConnectionEvents.DISCONNECT: it "
+                        + "is the event that actually means the player left the world, and it is "
+                        + "what ends the nav session now that a level change no longer does. "
+                        + "Found member refs: " + refs);
+
+        assertTrue(referencesField(refs,
+                        "net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientLevelEvents",
+                        "AFTER_CLIENT_LEVEL_CHANGE"),
+                "SeedscoutNavClientHooks must still register "
+                        + "ClientLevelEvents.AFTER_CLIENT_LEVEL_CHANGE, now as the trigger that "
+                        + "resends the world frame when the loaded save changed. Found member "
+                        + "refs: " + refs);
+    }
+
+    private static boolean referencesField(
+            List<MemberRef> refs, String ownerInternalName, String fieldName) {
+        return refs.stream().anyMatch(ref -> ref.tag == TAG_FIELDREF
+                && ref.ownerInternalName.equals(ownerInternalName)
+                && ref.memberName.equals(fieldName));
+    }
+
+    private static byte[] readClassBytes(String resource) throws IOException {
         try (InputStream in = ClientEntrypointWiringTest.class.getClassLoader()
-                .getResourceAsStream(ENTRYPOINT_CLASS_RESOURCE)) {
+                .getResourceAsStream(resource)) {
             if (in == null) {
-                fail("Could not find " + ENTRYPOINT_CLASS_RESOURCE + " on the test classpath; "
+                fail("Could not find " + resource + " on the test classpath; "
                         + "expected compileJava (a dependency of the test task) to have "
                         + "produced it.");
             }
@@ -88,21 +141,26 @@ class ClientEntrypointWiringTest {
         }
     }
 
-    /** One JVM constant-pool Methodref/InterfaceMethodref entry, resolved to plain names. */
-    private record MethodRef(String ownerInternalName, String methodName) {
+    /**
+     * One JVM constant-pool Fieldref/Methodref/InterfaceMethodref entry, resolved to plain
+     * names. {@code tag} is kept so a "calls this method" claim is never satisfied by a field
+     * reference that happens to share a name.
+     */
+    private record MemberRef(int tag, String ownerInternalName, String memberName) {
     }
 
     /**
      * Minimal JVM class-file constant-pool parser (JVMS section 4.4), just enough to resolve
-     * every Methodref/InterfaceMethodref entry to an (owner internal name, method name) pair.
-     * Deliberately does not parse method bodies/bytecode instructions -- see the class doc for
-     * exactly what that limits this test to proving.
+     * every Fieldref/Methodref/InterfaceMethodref entry to an (owner internal name, member name)
+     * pair. Deliberately does not parse method bodies/bytecode instructions -- see the class doc
+     * for exactly what that limits this test to proving.
      */
-    private static List<MethodRef> parseMethodRefs(byte[] classBytes) throws IOException {
+    private static List<MemberRef> parseMemberRefs(byte[] classBytes, String resource)
+            throws IOException {
         try (DataInputStream in = new DataInputStream(new java.io.ByteArrayInputStream(classBytes))) {
             int magic = in.readInt();
             if (magic != 0xCAFEBABE) {
-                fail("Not a valid .class file (bad magic): " + ENTRYPOINT_CLASS_RESOURCE);
+                fail("Not a valid .class file (bad magic): " + resource);
             }
             in.readUnsignedShort(); // minor version
             in.readUnsignedShort(); // major version
@@ -149,13 +207,13 @@ class ClientEntrypointWiringTest {
                         break;
                     default:
                         fail("Unrecognized constant pool tag " + tag + " while parsing "
-                                + ENTRYPOINT_CLASS_RESOURCE + " at index " + i);
+                                + resource + " at index " + i);
                 }
                 // remember the tag alongside the raw data for the resolve pass below
                 pool[i] = new Object[] {tag, pool[i]};
             }
 
-            List<MethodRef> refs = new ArrayList<>();
+            List<MemberRef> refs = new ArrayList<>();
             for (int i = 1; i < constantPoolCount; i++) {
                 Object entry = pool[i];
                 if (entry == null) {
@@ -163,7 +221,7 @@ class ClientEntrypointWiringTest {
                 }
                 Object[] tagged = (Object[]) entry;
                 int tag = (int) tagged[0];
-                if (tag != 10 && tag != 11) { // Methodref / InterfaceMethodref only
+                if (tag != TAG_FIELDREF && tag != TAG_METHODREF && tag != TAG_INTERFACE_METHODREF) {
                     continue;
                 }
                 int[] classAndNameType = (int[]) tagged[1];
@@ -175,9 +233,9 @@ class ClientEntrypointWiringTest {
 
                 int[] nameAndType = (int[]) ((Object[]) pool[nameAndTypeIndex])[1];
                 int nameUtf8Index = nameAndType[0];
-                String methodName = (String) ((Object[]) pool[nameUtf8Index])[1];
+                String memberName = (String) ((Object[]) pool[nameUtf8Index])[1];
 
-                refs.add(new MethodRef(ownerInternalName, methodName));
+                refs.add(new MemberRef(tag, ownerInternalName, memberName));
             }
             return refs;
         }

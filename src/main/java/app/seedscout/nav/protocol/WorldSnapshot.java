@@ -1,8 +1,9 @@
 package app.seedscout.nav.protocol;
 
 /**
- * Section 4.1's {@code world} frame, sent once immediately after the player confirms
- * pairing.
+ * Section 4.1's {@code world} frame, sent immediately after the player confirms pairing,
+ * and resent if the loaded save changes under a live link (see {@link SaveIdentity}: a
+ * dimension change is NOT such a change, and does not resend).
  *
  * <p><b>{@code seed} is a DECIMAL STRING at every layer, never a numeric type.</b> This
  * is the single most damaging thing in the protocol to get wrong, and it fails silently:
