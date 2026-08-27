@@ -72,7 +72,7 @@ class WireFixtureTest {
     // ------------------------------------------------------------------
 
     private static final String SHA256_PROTOCOL_DOC =
-            "73db328ba98c264fa7ba58745f34e5cd32c89f396cb6e057a5d3489c25cd5193";
+            "ef97d56284c425b3a32767afca0c0e6a119fe37cc3d1823787e8a5f1f2a32aba";
 
     private static final String SHA256_WORLD =
             "ff03da82de42de6a05d79062e2a7acbd746b68b30d78ba4752093a705e85a486";

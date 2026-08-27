@@ -116,7 +116,14 @@ mod without breaking the link.
 
 ### 4.1 Mod to app
 
-`world`, sent once immediately after the player confirms pairing:
+`world`, sent immediately after the player confirms pairing, and resent if the
+loaded save changes under a live link. A dimension change is NOT such a change
+and does not resend: the save identity the mod compares is deliberately
+dimension-free, so walking through a nether portal leaves it equal. The app
+must therefore accept more than one `world` frame per session, and treat the
+newest as authoritative. Where the mod cannot determine whether the save
+changed, it resends: a redundant frame carrying an unchanged seed is harmless,
+whereas a missed one leaves the app showing the previous world indefinitely.
 
 ```json
 {"type":"world","edition":"java","mc":"1.21.11","dimension":"overworld",
