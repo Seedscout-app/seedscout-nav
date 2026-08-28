@@ -622,6 +622,29 @@ public final class LinkServer implements AutoCloseable {
         }
     }
 
+    /**
+     * Releases everything this instance holds, exactly once. Every end reaches here: a
+     * rejection, {@link #unlink}, {@link #close}, the pairing window expiring, and a session
+     * ending on its own ({@code onSessionEnded}).
+     *
+     * <p>Clearing the drawn route is part of releasing, not a nicety. Two reasons, and the
+     * second is the one that bites:
+     *
+     * <ul>
+     *   <li>A route outliving its link is a line the player can no longer clear or update from
+     *       the app, which is the same reading {@code shared/nav_protocol.md} section 4.2
+     *       takes of a route whose world the player has left.</li>
+     *   <li>{@code ClientNavState.currentRoute} is the watermark every inbound route is
+     *       checked against with {@link app.seedscout.nav.protocol.RouteFrame#supersedes}, and
+     *       it lives for the whole JVM. The app restarts its route ids at 1 for each pairing
+     *       (the token is single use, so every pairing is a new session), so leaving the
+     *       watermark standing means the SECOND pairing session in one Minecraft run has every
+     *       route silently dropped, with no unlink and no error.</li>
+     * </ul>
+     *
+     * <p>BEHAVIOUR CHANGE, deliberately: an in-progress route now disappears when the link
+     * drops rather than staying on screen until the client shuts down.
+     */
     private void tearDown() {
         synchronized (lock) {
             if (tornDown) {
@@ -629,6 +652,7 @@ public final class LinkServer implements AutoCloseable {
             }
             tornDown = true;
         }
+        renderSink.clearRoute();
         closeListener();
         ScheduledFuture<?> ping = pingTask;
         if (ping != null) {

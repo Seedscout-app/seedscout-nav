@@ -3,6 +3,7 @@ package app.seedscout.nav.link;
 import app.seedscout.nav.protocol.NavProtocol;
 import app.seedscout.nav.protocol.PlayerPosition;
 import app.seedscout.nav.protocol.RouteFrame;
+import app.seedscout.nav.protocol.UnlinkFrame;
 import app.seedscout.nav.protocol.WorldSnapshot;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -290,6 +291,49 @@ class LinkServerTest {
 
         socket.sendText("{\"type\":\"clear\"}", true).get(3, TimeUnit.SECONDS);
         waitFor(() -> sink.clears > 0, "clear to be received");
+    }
+
+    /**
+     * Ending a link clears the drawn route, and this is not cosmetic.
+     *
+     * <p>{@code ClientNavState.currentRoute} is a process lifetime watermark: every inbound
+     * route is checked with {@link RouteFrame#supersedes}, so once id N has been accepted,
+     * nothing with an id at or below N is ever drawn again. The app restarts its route ids at
+     * 1 on every {@code connect}, because the pairing token is single use and each pairing is
+     * a brand new session. Without a clear on teardown, the SECOND pairing session inside one
+     * Minecraft run therefore has every route silently dropped: no unlink, no error, no log.
+     * That is exactly the state a tester lands in when they re-pair to check whether a route
+     * fix worked.
+     *
+     * <p>Asserted on {@link LinkServer#unlink}, which routes through the same single teardown
+     * every other end does (a peer disconnect, an idle timeout, the token window expiring,
+     * {@code close()}), so this one assertion covers all of them.
+     */
+    @Test
+    @Timeout(15)
+    void endingTheLinkClearsTheDrawnRoute() throws Exception {
+        StubWorldSource world = new StubWorldSource();
+        RecordingRenderSink sink = new RecordingRenderSink();
+        LinkServer server = open(world, sink);
+        String token = tokenFrom(server);
+
+        CollectingListener listener = new CollectingListener();
+        WebSocket socket = connect(server, token, listener);
+
+        awaitState(server, LinkServer.State.AWAITING_CONFIRMATION);
+        server.confirm();
+        awaitState(server, LinkServer.State.LINKED);
+
+        String route = "{\"type\":\"route\",\"id\":1,\"dimension\":\"overworld\","
+                + "\"label\":\"Woodland Mansion\",\"points\":[[0,0],[240,96]]}";
+        socket.sendText(route, true).get(3, TimeUnit.SECONDS);
+        waitFor(() -> !sink.routes.isEmpty(), "route to be received");
+        assertEquals(0, sink.clears, "nothing has been cleared yet");
+
+        server.unlink(UnlinkFrame.PLAYER_ENDED);
+
+        waitFor(() -> sink.clears == 1, "the drawn route to be cleared on unlink");
+        assertEquals(1, sink.clears, "teardown must clear exactly once, not once per path");
     }
 
     /**

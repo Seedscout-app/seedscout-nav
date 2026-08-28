@@ -4,6 +4,7 @@ import app.seedscout.nav.link.RenderSink;
 import app.seedscout.nav.link.WorldSource;
 import app.seedscout.nav.protocol.PlayerPosition;
 import app.seedscout.nav.protocol.RouteFrame;
+import app.seedscout.nav.protocol.SafeLabel;
 import app.seedscout.nav.protocol.SaveIdentity;
 import app.seedscout.nav.protocol.WorldSnapshot;
 
@@ -17,6 +18,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.file.Path;
 
@@ -39,6 +43,8 @@ import java.nio.file.Path;
  * way {@link #snapshot} is.
  */
 public final class ClientNavState implements WorldSource, RenderSink {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger("seedscout-nav");
 
     public static final ClientNavState INSTANCE = new ClientNavState();
 
@@ -184,17 +190,44 @@ public final class ClientNavState implements WorldSource, RenderSink {
     // RenderSink
     // -----------------------------------------------------------------
 
+    /**
+     * Section 4.2's two acceptance gates, and the ONLY place either is decided.
+     *
+     * <p>Every outcome is logged at debug, because both gates fail silently by design: a
+     * route that is rejected here draws nothing, sends nothing back, and is
+     * indistinguishable from a route that drew correctly and simply was not looked at.
+     * Without these lines the only way to tell a dimension mismatch from a stale id from a
+     * working renderer is a physical device and guesswork, which is exactly what the
+     * 2026-08-27 device pass cost.
+     *
+     * <p>The route's own dimension string is untrusted wire text (bounded to
+     * {@code NavProtocol.MAX_DIMENSION_CHARS}, but not otherwise inert), so it goes through
+     * {@link SafeLabel} before it reaches the log: that is this repo's existing reducer for
+     * exactly this, and it strips the control and format characters that would otherwise
+     * let a peer forge log lines. The label itself is never logged at all.
+     */
     @Override
     public void showRoute(RouteFrame route) {
         Snapshot s = snapshot;
         String currentDimension = s == null ? null : s.dimension();
         if (!route.matchesDimension(currentDimension)) {
+            LOGGER.debug(
+                    "Route {} rejected: dimension \"{}\" is not the player's \"{}\"",
+                    route.id(),
+                    SafeLabel.of(route.dimension()).literalText(),
+                    currentDimension);
             return;
         }
-        if (!route.supersedes(currentRoute)) {
+        RouteFrame drawn = currentRoute;
+        if (!route.supersedes(drawn)) {
+            LOGGER.debug(
+                    "Route {} rejected: superseded by the route already drawn (id {})",
+                    route.id(),
+                    drawn == null ? null : drawn.id());
             return;
         }
         currentRoute = route;
+        LOGGER.debug("Route {} accepted and drawn", route.id());
     }
 
     @Override

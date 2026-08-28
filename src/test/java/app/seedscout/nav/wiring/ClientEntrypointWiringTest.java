@@ -122,6 +122,57 @@ class ClientEntrypointWiringTest {
                         + "refs: " + refs);
     }
 
+    /**
+     * The three references the whole in-game route render path hangs off, guarded the same
+     * way the two above are.
+     *
+     * <p>HONESTLY LABELLED: this is regression coverage, not evidence of a defect. It passes
+     * against the source as it stands, and it was added because the 2026-08-27 device pass
+     * reported no route drawing anywhere and nothing in the test suite could rule the in-game
+     * half in or out. Losing any one of these three would take the whole render path out
+     * silently, exactly the way the entrypoint defect this class was born for did: drop
+     * {@code END_CLIENT_TICK} and the renderer is never ticked, drop
+     * {@code RouteRenderer.onClientTick} and the tick reaches nothing, drop
+     * {@code HudElementRegistry.addLast} and the distance readout never exists.
+     *
+     * <p>Same limits as every check here: a constant-pool reference proves the call site was
+     * compiled into this class, not that Fabric dispatches it or that what it registers draws
+     * anything. Only a device can decide that.
+     */
+    @Test
+    void hooksReferenceTheWholeRouteRenderPath() throws IOException {
+        byte[] classBytes = readClassBytes(HOOKS_CLASS_RESOURCE);
+        List<MemberRef> refs = parseMemberRefs(classBytes, HOOKS_CLASS_RESOURCE);
+
+        assertTrue(referencesField(refs,
+                        "net/fabricmc/fabric/api/client/event/lifecycle/v1/ClientTickEvents",
+                        "END_CLIENT_TICK"),
+                "SeedscoutNavClientHooks must register ClientTickEvents.END_CLIENT_TICK: it is "
+                        + "the only thing that drives ClientNavState's snapshot and the route "
+                        + "renderer. Found member refs: " + refs);
+
+        assertTrue(referencesMethod(refs,
+                        "app/seedscout/nav/client/render/RouteRenderer",
+                        "onClientTick"),
+                "SeedscoutNavClientHooks must call RouteRenderer.onClientTick() from its tick "
+                        + "handler: without it the client ticks and the route is never drawn. "
+                        + "Found member refs: " + refs);
+
+        assertTrue(referencesMethod(refs,
+                        "net/fabricmc/fabric/api/client/rendering/v1/hud/HudElementRegistry",
+                        "addLast"),
+                "SeedscoutNavClientHooks must register the route HUD element with "
+                        + "HudElementRegistry.addLast: without it there is no distance readout "
+                        + "even when a route is accepted. Found member refs: " + refs);
+    }
+
+    private static boolean referencesMethod(
+            List<MemberRef> refs, String ownerInternalName, String methodName) {
+        return refs.stream().anyMatch(ref -> ref.tag != TAG_FIELDREF
+                && ref.ownerInternalName.equals(ownerInternalName)
+                && ref.memberName.equals(methodName));
+    }
+
     private static boolean referencesField(
             List<MemberRef> refs, String ownerInternalName, String fieldName) {
         return refs.stream().anyMatch(ref -> ref.tag == TAG_FIELDREF

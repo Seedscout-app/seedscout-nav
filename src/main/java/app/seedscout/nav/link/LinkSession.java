@@ -10,6 +10,9 @@ import app.seedscout.nav.protocol.RouteFrame;
 import app.seedscout.nav.protocol.UnlinkFrame;
 import app.seedscout.nav.protocol.WorldSnapshot;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.time.Clock;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -33,6 +36,8 @@ import java.util.concurrent.TimeUnit;
  * the player confirms pairing, and is discarded when the session ends.
  */
 final class LinkSession {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger("seedscout-nav");
 
     /** How often the position sampler wakes up. Well under the 5&nbsp;Hz ceiling so the
      * ceiling, not the sampler, is what limits the outbound rate; comfortably under the
@@ -103,12 +108,32 @@ final class LinkSession {
         if (!(result instanceof Inbound.Accepted accepted)) {
             // Section 4: an unrecognised or invalid frame is ignored, not an error. Which
             // reason, if any, stays inside RouteSanitizer/DropReason; this layer has
-            // nothing further to do with it.
+            // nothing further to do with it BEYOND saying so at debug level.
+            //
+            // Logged because a dropped route is otherwise completely invisible: the
+            // protocol has no negative acknowledgement, so a route that never draws looks
+            // identical from the app whether it was malformed, superseded, or rendered
+            // fine and simply not noticed. The DropReason enum is the mod's own value and
+            // carries no fragment of the offending frame (see Inbound.Dropped), so this
+            // logs no attacker controlled text.
+            if (result instanceof Inbound.Dropped dropped) {
+                LOGGER.debug("Inbound frame dropped: {}", dropped.reason());
+            }
             return;
         }
         switch (accepted.frame()) {
-            case RouteFrame route -> renderSink.showRoute(route);
-            case ClearFrame clear -> renderSink.clearRoute();
+            case RouteFrame route -> {
+                // Id and point count only: the label is attacker controlled and belongs
+                // nowhere near a log line (SafeLabel exists precisely so it never reaches
+                // an unguarded surface).
+                LOGGER.debug(
+                        "Route frame accepted: id={} points={}", route.id(), route.points().size());
+                renderSink.showRoute(route);
+            }
+            case ClearFrame clear -> {
+                LOGGER.debug("Clear frame accepted");
+                renderSink.clearRoute();
+            }
         }
     }
 

@@ -30,3 +30,4 @@ bin/
 
 # Loom development run directory (contains world saves and logs)
 run/
+logs/
