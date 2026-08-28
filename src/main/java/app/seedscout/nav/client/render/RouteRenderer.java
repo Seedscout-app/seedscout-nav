@@ -192,7 +192,22 @@ public final class RouteRenderer {
             return;
         }
         int surfaceY = level.getHeight(Heightmap.Types.MOTION_BLOCKING, blockX, blockZ);
-        level.addParticle(ParticleTypes.END_ROD, x, surfaceY + 0.2, z, 0.0, 0.02, 0.0);
+        // Spawn at the CENTRE of the block whose height was just looked up, not the raw
+        // sample coordinate. Block (blockX, blockZ) spans [blockX, blockX+1) x [blockZ,
+        // blockZ+1); the raw x/z used here previously lands on the corner shared by four
+        // blocks, so a player digging down at the drawn point risks opening a 2x2 column
+        // instead of the single intended block.
+        level.addParticle(ParticleTypes.END_ROD, blockCenter(blockX), surfaceY + 0.2, blockCenter(blockZ), 0.0, 0.02, 0.0);
+    }
+
+    /**
+     * The centre coordinate of the block at {@code blockCoordinate} along one axis. Package
+     * private and pure so a test can assert the block-centre snap directly, the same way
+     * {@link #clipToRenderDistance} exposes geometry a test can drive without touching
+     * {@link ClientLevel}.
+     */
+    static double blockCenter(int blockCoordinate) {
+        return blockCoordinate + 0.5;
     }
 
     /** Distance in blocks to the current route's destination, or null when nothing is drawn. */
