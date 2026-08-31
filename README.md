@@ -59,21 +59,46 @@ For issues, questions, or suggestions, contact support@seedscout.app.
 
 ## Building
 
-Requires:
-- JDK 25 or later (with `$JAVA_HOME/bin` first on PATH)
-- Gradle 9.5.1 (included in the wrapper)
+There is no released JAR yet, so building from source is currently the only way to
+get the mod. A build takes about 30 seconds once Gradle has warmed its cache.
 
-To build:
+**Requirements**
+
+- **JDK 25 or later.** The build targets Java 25 (`options.release.set(25)` in
+  `build.gradle.kts`), so an earlier JDK will not compile it.
+- Nothing else. Gradle 9.5.1 ships with the wrapper, and Fabric Loom downloads
+  Minecraft and Fabric API itself on the first run.
+
+**Point `JAVA_HOME` at your JDK 25**, then run the wrapper:
 
 ```bash
-export JAVA_HOME=/usr/local/opt/openjdk@25
-./gradlew clean build
+# macOS, Homebrew (works on both Intel and Apple Silicon):
+export JAVA_HOME=$(brew --prefix openjdk@25)
+# Linux, SDKMAN:      export JAVA_HOME=~/.sdkman/candidates/java/25-open
+# Windows, PowerShell: $env:JAVA_HOME = "C:\Program Files\Java\jdk-25"
+
+./gradlew build
 ```
 
-To run the development client:
+On macOS, avoid `/usr/libexec/java_home -v 25`: it only sees JDKs registered under
+`/Library/Java/JavaVirtualMachines`, so with a Homebrew JDK it silently returns a
+different Java instead of failing, and the build then dies on an unhelpful error.
+
+**Where the JAR lands**
+
+```
+build/libs/seedscout-nav-0.1.0.jar
+```
+
+That is the file to drop in your `mods` folder. The `-sources.jar` beside it is for
+IDEs; Minecraft does not need it.
+
+**Running a development client** instead of installing the JAR:
 
 ```bash
 ./gradlew runClient
 ```
 
-All compiler flags are pinned in `shared/cflags.txt` to ensure reproducible builds. See `gradle.properties` for the exact toolchain versions.
+`./gradlew build` runs the test suite as part of the build. The Minecraft version,
+the Fabric Loader version, the Fabric API version and the Loom version are all
+pinned in `gradle.properties`.
