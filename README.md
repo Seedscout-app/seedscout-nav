@@ -2,6 +2,10 @@
 
 A Fabric Loader mod for Minecraft Java Edition that pairs with the Seedscout Android app over the local network. Once paired, the app reads your world seed and player position, and can draw a route on the ground to guide you toward features.
 
+> **Pre-release.** This mod is not published to Modrinth or CurseForge yet and has
+> no released JAR. End-to-end pairing has had only limited testing on real hardware,
+> so treat a build from source as experimental. Watch this repo for the first release.
+
 ## Features
 
 - QR-code based pairing with the Seedscout Android app
@@ -18,12 +22,16 @@ A Fabric Loader mod for Minecraft Java Edition that pairs with the Seedscout And
 
 ## Usage
 
-1. Press the pairing key (configurable in Mod Menu or within the game settings) to open the pairing screen.
+1. Press the pairing key, **N** by default, to open the pairing screen. It is rebindable through Mod Menu or Minecraft's own Options, Controls menu, listed under the Seedscout Nav category.
 2. Use the Seedscout Android app to scan the displayed QR code.
 3. Confirm the pairing in the in-game prompt.
 4. The app can now see your seed and position, and will draw routes on your world.
 
 Press the key again to close the pairing screen or end an active session.
+
+**Requirements at a glance:** Minecraft **Java Edition** only (there is no Bedrock
+build, and the Seedscout app's Bedrock mode cannot pair), Fabric Loader (not Forge),
+and the Seedscout app on Android on the same local network.
 
 ## Security
 
