@@ -29,7 +29,17 @@ final class VisionQrDecoder {
     }
 
     static boolean isAvailable() {
-        return isOnPath("swift");
+        // Vision.framework (imported by tools/decode_qr.swift) is macOS-only. A `swift`
+        // binary on PATH is not proof of that: GitHub's ubuntu-latest runner image ships a
+        // standalone Swift toolchain (confirmed against actions/runner-images) with no
+        // Vision framework behind it, so checking for `swift` alone reports available on
+        // Linux and the decoder then fails at runtime instead of skipping cleanly.
+        return isMacOs() && isOnPath("swift");
+    }
+
+    private static boolean isMacOs() {
+        String osName = System.getProperty("os.name");
+        return osName != null && osName.toLowerCase(java.util.Locale.ROOT).contains("mac");
     }
 
     private static boolean isOnPath(String executable) {

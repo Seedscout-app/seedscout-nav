@@ -74,6 +74,30 @@ jobs:
       - name: gradle test
         run: ./gradlew test
 
+  qr-scan-proof-macos:
+    name: qr scan proof (macOS)
+    # QrCodeScanRoundTripTest shells out to tools/decode_qr.swift, which imports Apple's
+    # Vision framework: macOS-only, so this class only ever runs here, never on the
+    # ubuntu-latest build/test jobs above (VisionQrDecoder.isAvailable() requires macOS, not
+    # merely a swift binary on PATH; see that class for why a swift-only check was not
+    # enough). macos-latest runners are free for public repositories, and this repository
+    # is public, so there is no cost reason to skip this coverage. The Xcode Command Line
+    # Tools preinstalled on GitHub's macOS images already provide the swift toolchain.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: swift toolchain is present (Xcode Command Line Tools ship it)
+        run: swift --version
+
+      - name: gradle test (QrCodeScanRoundTripTest only)
+        run: ./gradlew test --tests "app.seedscout.nav.qr.QrCodeScanRoundTripTest"
+
   hygiene:
     name: hygiene (em dash + secret scan)
     runs-on: ubuntu-latest

@@ -26,9 +26,12 @@ import org.junit.jupiter.api.io.TempDir;
  * here, nor does it prove anything about a physical camera's behavior under bad lighting, glare,
  * a curved or small in-game display, etc.
  *
- * <p>Skips itself (does not fail the build) when the {@code swift} toolchain is not on {@code
- * PATH}, since the decoder oracle in {@code tools/decode_qr.swift} is macOS-only and needs no
- * separate install, but is still an environment dependency this test does not control.
+ * <p>Skips itself (does not fail the build) off macOS, or when the {@code swift} toolchain is
+ * not on {@code PATH}, since the decoder oracle in {@code tools/decode_qr.swift} imports Apple's
+ * Vision framework, which exists only on macOS: a {@code swift} binary alone is not proof the
+ * decoder can run (GitHub's ubuntu-latest image ships a standalone Swift toolchain with no
+ * Vision behind it), so both conditions are checked. See the {@code qr scan proof (macOS)} CI
+ * job for where this class actually runs.
  */
 class QrCodeScanRoundTripTest {
 
@@ -36,7 +39,10 @@ class QrCodeScanRoundTripTest {
 
     @BeforeAll
     static void checkToolchain() {
-        assumeTrue(VisionQrDecoder.isAvailable(), "swift toolchain not on PATH; skipping Vision scan proof");
+        assumeTrue(
+                VisionQrDecoder.isAvailable(),
+                "not on macOS (or swift toolchain not on PATH); Vision.framework is macOS-only, "
+                        + "skipping the Vision scan proof");
         // Gradle's test task runs with the project root as the working directory.
         decoder = new VisionQrDecoder(Path.of(System.getProperty("user.dir")));
     }
