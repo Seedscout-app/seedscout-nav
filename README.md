@@ -40,6 +40,9 @@ and the Seedscout app on Android on the same local network.
 - Pairing always requires an explicit in-game confirmation from the player; scanning the QR code alone is not sufficient.
 - The pairing token is never written to disk or logs.
 
+See [SECURITY.md](SECURITY.md) for the full threat model, what a device on
+your network can and cannot do, and how to report a vulnerability.
+
 ## License
 
 This project is licensed under the Apache License 2.0, chosen deliberately to ensure the mod remains free and open source. This differs from the Seedscout app's proprietary license because a Minecraft mod must be free and open to comply with Mojang's guidelines and to be credible to the community.
