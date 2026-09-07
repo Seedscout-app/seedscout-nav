@@ -6,7 +6,7 @@ import app.seedscout.nav.protocol.RoutePoint;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.core.particles.DustColorTransitionOptions;
 import net.minecraft.world.level.levelgen.Heightmap;
 
 import java.util.List;
@@ -62,6 +62,35 @@ public final class RouteRenderer {
      * "bounded but still O(pointCount)".
      */
     static final int MAX_SAMPLES_PER_PASS = 4096;
+
+    /**
+     * Trail colour pair, matched to the phone app's own map route (bright cyan-teal core over
+     * a near-black casing) so the in-world trail and the map reading agree. FINDING (user
+     * report): plain {@code ParticleTypes.END_ROD} is a small whitish spark, and a single pale
+     * colour washes out against snow, ice and other bright terrain no matter how it is tuned.
+     * {@link net.minecraft.core.particles.DustColorTransitionOptions} sidesteps this: each
+     * particle animates from {@link #TRAIL_COLOR_DARK} to {@link #TRAIL_COLOR_BRIGHT} over its
+     * lifetime, so the trail always carries both a dark tone (visible on snow/sand/ice) and a
+     * saturated bright tone (visible on stone/dirt/foliage) rather than betting on one colour
+     * reading against every terrain the route might cross. RGB24, no alpha channel: dust
+     * colours are packed straight into {@code 0xRRGGBB} (see
+     * {@code net.minecraft.util.ARGB.vector3fFromRGB24}), so the app's ARGB constants have
+     * their {@code 0xFF} alpha byte dropped here rather than reused.
+     */
+    static final int TRAIL_COLOR_DARK = 0x07100F;
+
+    /** See {@link #TRAIL_COLOR_DARK}. */
+    static final int TRAIL_COLOR_BRIGHT = 0x39E5D5;
+
+    /**
+     * Vanilla dust (e.g. redstone) spawns at scale 1.0
+     * ({@link net.minecraft.core.particles.DustParticleOptions#REDSTONE}); the user asked for
+     * the trail's points to be larger and pop out, so this trail spawns at roughly double that.
+     * Comfortably inside the engine's {@code [MIN_SCALE, MAX_SCALE]} range of {@code [0.01,
+     * 4.0]} without approaching either extreme, where a particle would either be invisible or
+     * balloon into a blob that obscures the ground it is meant to mark.
+     */
+    static final float TRAIL_PARTICLE_SCALE = 2.0f;
 
     private int tickCounter;
     private volatile Double distanceToDestination;
@@ -197,7 +226,9 @@ public final class RouteRenderer {
         // blockZ+1); the raw x/z used here previously lands on the corner shared by four
         // blocks, so a player digging down at the drawn point risks opening a 2x2 column
         // instead of the single intended block.
-        level.addParticle(ParticleTypes.END_ROD, blockCenter(blockX), surfaceY + 0.2, blockCenter(blockZ), 0.0, 0.02, 0.0);
+        DustColorTransitionOptions trailDust =
+                new DustColorTransitionOptions(TRAIL_COLOR_DARK, TRAIL_COLOR_BRIGHT, TRAIL_PARTICLE_SCALE);
+        level.addParticle(trailDust, blockCenter(blockX), surfaceY + 0.2, blockCenter(blockZ), 0.0, 0.02, 0.0);
     }
 
     /**
