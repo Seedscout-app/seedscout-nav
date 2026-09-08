@@ -10,12 +10,12 @@ A Fabric Loader mod for Minecraft Java Edition that pairs with the Seedscout And
 
 - QR-code based pairing with the Seedscout Android app
 - Share your world seed and player position with the app in real time
-- Receive and render routes from the app on your world
+- Receive routes from the app and render them as a full-bright particle trail (dark to bright cyan-teal), sampled every 2 blocks along the ground
 - Entirely client-side; no account, no cloud
 
 ## Installation
 
-1. **Install Fabric Loader** for Minecraft 1.26.2, following the [official Fabric documentation](https://fabricmc.net/use/).
+1. **Install Fabric Loader** for Minecraft 26.2, following the [official Fabric documentation](https://fabricmc.net/use/).
 2. **Install Fabric API** 0.158.0+26.2 or later; place the JAR in your `mods` folder.
 3. **Install this mod**: place the Seedscout Nav JAR in your `mods` folder.
 4. **Start Minecraft** and launch a world.

@@ -4,8 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.seedscout.nav.client.particle.FullbrightDustColorTransitionParticle;
+
 import net.minecraft.core.particles.DustColorTransitionOptions;
 import net.minecraft.core.particles.ScalableParticleOptionsBase;
+import net.minecraft.util.LightCoordsUtil;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -20,6 +23,13 @@ import org.junit.jupiter.api.Test;
  * down: the two tones being distinct, both being derived from the app's actual route colours
  * (not just any two colours), and the scale sitting inside the engine's legal range and above
  * vanilla's own default rather than being a no-op.
+ *
+ * <p>SECOND FINDING (owner report, after approving this colour pair): the trail read well in
+ * snow but the owner flagged it would likely be unreadable in caves/at night, and separately
+ * asked for the sample points to sit closer together. {@link FullbrightDustColorTransitionParticle}
+ * and the {@code SAMPLE_SPACING} tightening below cover those two follow-ups; the same
+ * no-live-{@code ClientLevel} constraint applies, so these pin the pure constants the fix could
+ * get wrong rather than driving a real particle spawn.
  */
 class RouteRendererTrailColorTest {
 
@@ -56,5 +66,19 @@ class RouteRendererTrailColorTest {
                 RouteRenderer.TRAIL_COLOR_DARK, RouteRenderer.TRAIL_COLOR_BRIGHT, RouteRenderer.TRAIL_PARTICLE_SCALE);
 
         assertEquals(RouteRenderer.TRAIL_PARTICLE_SCALE, trailDust.getScale());
+    }
+
+    @Test
+    @DisplayName("the fullbright trail particle reports LightCoordsUtil.FULL_BRIGHT, not real world light")
+    void trailParticleReportsFullBrightLightCoords() {
+        assertEquals(LightCoordsUtil.FULL_BRIGHT, FullbrightDustColorTransitionParticle.LIGHT_COORDS,
+                "the whole point of FullbrightDustColorTransitionParticle is to stop the trail "
+                        + "dimming in caves and at night; it must report full brightness unconditionally");
+    }
+
+    @Test
+    @DisplayName("sample spacing was tightened to 2.0 blocks, per the owner's request for a denser trail")
+    void sampleSpacingIsTwoBlocks() {
+        assertEquals(2.0, RouteRenderer.SAMPLE_SPACING);
     }
 }

@@ -179,8 +179,8 @@ thread, freezing it. That is fixed: `clipToRenderDistance` throws away the
 part of a segment beyond `MAX_RENDER_DISTANCE` (256 blocks) from the player
 before any sampling happens, using a closed-form circle intersection that
 costs the same regardless of how far apart the two points actually are.
-Samples are then taken every `SAMPLE_SPACING` (4 blocks), capped per segment
-at `MAX_SAMPLES_PER_SEGMENT` (129, derived from the render distance and
+Samples are then taken every `SAMPLE_SPACING` (2 blocks), capped per segment
+at `MAX_SAMPLES_PER_SEGMENT` (257, derived from the render distance and
 spacing) and per render pass at `MAX_SAMPLES_PER_PASS` (4096) regardless of
 how many of a route's 512 points are hostile. `RouteRendererDosTest` asserts
 this bound directly against the exact hostile route that used to hang the

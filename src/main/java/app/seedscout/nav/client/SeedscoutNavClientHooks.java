@@ -1,6 +1,7 @@
 package app.seedscout.nav.client;
 
 import app.seedscout.nav.client.gui.PairScreen;
+import app.seedscout.nav.client.particle.SeedscoutNavParticles;
 import app.seedscout.nav.client.render.RouteHud;
 import app.seedscout.nav.client.render.RouteRenderer;
 import app.seedscout.nav.protocol.SaveIdentity;
@@ -45,6 +46,12 @@ public final class SeedscoutNavClientHooks {
     }
 
     public static void init() {
+        // Must run before any particle can be spawned: this both registers the FULLBRIGHT_TRAIL
+        // ParticleType (as a side effect of first touching SeedscoutNavParticles) and its
+        // client-side rendering provider. See SeedscoutNavParticles for why this is this mod's
+        // first registered content and the exact API this relies on.
+        SeedscoutNavParticles.init();
+
         KeyMappingHelper.registerKeyMapping(OPEN_PAIR_SCREEN);
 
         HudElementRegistry.addLast(

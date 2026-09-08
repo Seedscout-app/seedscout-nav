@@ -31,7 +31,7 @@ upstream, license, or attribution entry to track here.
 
 ## Native Binaries
 
-This project bundles NO native binaries. The bundled native binaries rule (see the parent Seedline project's CLAUDE.md) does not apply to this repository.
+This project bundles NO native binaries, so no build-obfuscation or symbol-stripping requirements apply to it. Everything shipped here is Java compiled from the source in this repository.
 
 ## Minecraft
 

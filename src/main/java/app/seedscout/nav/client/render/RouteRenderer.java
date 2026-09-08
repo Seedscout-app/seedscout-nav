@@ -1,6 +1,7 @@
 package app.seedscout.nav.client.render;
 
 import app.seedscout.nav.client.ClientNavState;
+import app.seedscout.nav.client.particle.FullbrightDustTransitionOptions;
 import app.seedscout.nav.protocol.RouteFrame;
 import app.seedscout.nav.protocol.RoutePoint;
 
@@ -13,8 +14,8 @@ import java.util.List;
 
 /**
  * Deliverable 5: draws the currently accepted route as a particle trail, sampling each
- * segment every 4 blocks and snapping each sample to the loaded-chunk surface height, and
- * tracks the distance-to-destination the HUD element reads.
+ * segment every {@link #SAMPLE_SPACING} blocks and snapping each sample to the loaded-chunk
+ * surface height, and tracks the distance-to-destination the HUD element reads.
  *
  * <p><b>Scope discipline (deliberate, matching the task brief's Phase 1 exclusions):</b> a
  * waypoint whose chunk is not loaded is simply skipped for that pass, not re-snapped once its
@@ -31,8 +32,18 @@ public final class RouteRenderer {
 
     public static final RouteRenderer INSTANCE = new RouteRenderer();
 
-    /** 4 blocks between samples along a segment, per the task brief. */
-    private static final double SAMPLE_SPACING = 4.0;
+    /**
+     * Blocks between samples along a segment. Started at 4.0 per the original task brief;
+     * tightened to 2.0 on owner request for a denser-looking trail once the fullbright fix (see
+     * {@link #spawnAt}) made the points readable in the dark. Halving this doubles the sample
+     * (and therefore particle) count for a given visible segment length; see
+     * {@link #MAX_SAMPLES_PER_SEGMENT} and {@link #MAX_SAMPLES_PER_PASS} for the ceilings that
+     * keep that increase bounded rather than open-ended. Package-private (not {@code private})
+     * so {@code RouteRendererTrailColorTest} can pin the exact value, the same way
+     * {@link #MAX_SAMPLES_PER_SEGMENT} and {@link #MAX_SAMPLES_PER_PASS} are already exposed to
+     * tests below.
+     */
+    static final double SAMPLE_SPACING = 2.0;
 
     /** Particles are spawned a few times a second, not every tick: a dense trail does not
      * need 20 Hz refresh, and this keeps the particle count sane on a long route. */
@@ -76,6 +87,17 @@ public final class RouteRenderer {
      * colours are packed straight into {@code 0xRRGGBB} (see
      * {@code net.minecraft.util.ARGB.vector3fFromRGB24}), so the app's ARGB constants have
      * their {@code 0xFF} alpha byte dropped here rather than reused.
+     *
+     * <p>SECOND FINDING (owner report, after approving this colour pair): the owner tested this
+     * in snow ("looked good") but flagged that it "may not look great or at night" in darker
+     * settings. Confirmed by decompiling {@code DustColorTransitionParticle}: it inherits
+     * {@code Particle.getLightCoords(float)} unchanged, which reads real WORLD light, so the
+     * trail dims in caves and at night exactly as reported. The colour pair below is unchanged;
+     * only the lighting is fixed, by {@link #spawnAt} constructing a
+     * {@link app.seedscout.nav.client.particle.FullbrightDustTransitionOptions} instead of a
+     * plain {@code DustColorTransitionOptions}. See that class and
+     * {@link app.seedscout.nav.client.particle.FullbrightDustColorTransitionParticle} for why a
+     * new registered particle type was required to do this at all.
      */
     static final int TRAIL_COLOR_DARK = 0x07100F;
 
@@ -227,7 +249,7 @@ public final class RouteRenderer {
         // blocks, so a player digging down at the drawn point risks opening a 2x2 column
         // instead of the single intended block.
         DustColorTransitionOptions trailDust =
-                new DustColorTransitionOptions(TRAIL_COLOR_DARK, TRAIL_COLOR_BRIGHT, TRAIL_PARTICLE_SCALE);
+                new FullbrightDustTransitionOptions(TRAIL_COLOR_DARK, TRAIL_COLOR_BRIGHT, TRAIL_PARTICLE_SCALE);
         level.addParticle(trailDust, blockCenter(blockX), surfaceY + 0.2, blockCenter(blockZ), 0.0, 0.02, 0.0);
     }
 
