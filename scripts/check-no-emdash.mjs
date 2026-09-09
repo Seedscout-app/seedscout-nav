@@ -18,9 +18,9 @@
 // Adapted for the Seedscout Nav mod from the parent Seedline repository's
 // check-no-emdash.mjs.
 //
-// Scope: src/, scripts/, .github/, plus root README.md,
+// Scope: src/, scripts/, .github/, docs/, plus root README.md,
 // THIRD_PARTY_NOTICES.md, and LICENSE.
-// Types: .java .md .mjs .json .yml .yaml .gradle .kts .sh .properties
+// Types: .java .md .mjs .json .txt .yml .yaml .gradle .kts .sh .properties
 // Excludes: any path containing a build/ or run/ directory segment,
 // and gradle-generated files.
 import { execSync } from 'node:child_process'
@@ -48,6 +48,7 @@ const SCAN_ROOTS = [
   'src',
   'scripts',
   '.github',
+  'docs',
 ]
 const EXTRA_FILES = ['README.md', 'THIRD_PARTY_NOTICES.md', 'LICENSE']
 const EXTENSIONS = new Set([
@@ -55,6 +56,7 @@ const EXTENSIONS = new Set([
   '.md',
   '.mjs',
   '.json',
+  '.txt',
   '.yml',
   '.yaml',
   '.gradle',
