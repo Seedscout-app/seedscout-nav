@@ -91,7 +91,7 @@ different Java instead of failing, and the build then dies on an unhelpful error
 **Where the JAR lands**
 
 ```
-build/libs/seedscout-nav-0.1.0.jar
+build/libs/seedscout-nav-0.1.1.jar
 ```
 
 That is the file to drop in your `mods` folder. The `-sources.jar` beside it is for
@@ -160,7 +160,7 @@ Seedscout accounts on both stores. In order:
 4. **Tag and push the release.**
 
    ```bash
-   git tag v0.1.0
+   git tag v0.1.1
    git push --tags
    ```
 
