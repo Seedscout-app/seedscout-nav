@@ -9,7 +9,8 @@
     ],
     "contact": {
         "homepage": "https://seedscout.app",
-        "issues": "https://github.com/Seedscout-app/seedscout-nav",
+        "sources": "https://github.com/Seedscout-app/seedscout-nav",
+        "issues": "https://github.com/Seedscout-app/seedscout-nav/issues",
         "email": "support@seedscout.app"
     },
     "license": "Apache-2.0",
@@ -24,6 +25,6 @@
         "fabricloader": ">=0.19.3",
         "minecraft": ">=26.2 <26.3",
         "java": ">=25",
-        "fabric-api": "*"
+        "fabric-api": ">=0.158.0"
     }
 }

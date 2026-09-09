@@ -2,9 +2,13 @@
 
 A Fabric Loader mod for Minecraft Java Edition that pairs with the Seedscout Android app over the local network. Once paired, the app reads your world seed and player position, and can draw a route on the ground to guide you toward features.
 
-> **Pre-release.** This mod is not published to Modrinth or CurseForge yet and has
-> no released JAR. End-to-end pairing has had only limited testing on real hardware,
-> so treat a build from source as experimental. Watch this repo for the first release.
+> **Availability.** Modrinth and CurseForge listings are pending; see the
+> [Publishing](#publishing) section below for the exact steps to bring them
+> up. Until then, a built JAR is available from this repository's
+> [GitHub Releases](https://github.com/Seedscout-app/seedscout-nav/releases),
+> or build it yourself with the instructions below. End-to-end pairing has
+> had only limited testing on real hardware, so treat any build as an early
+> release.
 
 ## Features
 
@@ -102,3 +106,65 @@ IDEs; Minecraft does not need it.
 `./gradlew build` runs the test suite as part of the build. The Minecraft version,
 the Fabric Loader version, the Fabric API version and the Loom version are all
 pinned in `gradle.properties`.
+
+## Publishing
+
+This mod is not yet listed on Modrinth or CurseForge. Everything that can be
+automated already is: `.github/workflows/publish.yml` builds and publishes a
+tagged release to both stores, plus this repository's GitHub Releases, using
+[mc-publish](https://github.com/Kira-NT/mc-publish); `scripts/modrinth_create_project.sh`
+bootstraps the Modrinth project itself; and the listing copy for both stores
+lives in `docs/listing/`. What remains needs a human with access to the
+Seedscout accounts on both stores. In order:
+
+1. **Create the Modrinth project.**
+   - Create a Modrinth Personal Access Token (Modrinth account settings,
+     then PATs) with at least the `PROJECT_CREATE`, `PROJECT_WRITE`, and
+     `VERSION_CREATE` scopes. `PROJECT_CREATE` and `PROJECT_WRITE` cover the
+     bootstrap script below and any follow-up edits made by hand;
+     `VERSION_CREATE` is what the ongoing publish workflow needs to upload
+     each release.
+   - Run `MODRINTH_TOKEN=<token> ./scripts/modrinth_create_project.sh`
+     (run it with `--dry-run` first to review the exact request with no
+     network call). It creates the `seedscout-nav` project from
+     `docs/listing/summary.txt`, `docs/listing/description.md`, and the mod
+     icon.
+   - Note the `id` field in the script's output: that is the Modrinth
+     project id.
+   - **Modrinth review note:** a newly created project is not public
+     immediately. It goes through Modrinth's moderation queue before it is
+     visible to anyone else, so expect a delay between running the script
+     and the listing going live.
+
+2. **Create the CurseForge project.** CurseForge has no public
+   project-creation API, so this step happens on the website: sign in at
+   curseforge.com, then create a new Minecraft mod project named
+   "Seedscout Nav" with slug `seedscout-nav`. Use
+   `docs/listing/curseforge-description.md` as the project description and
+   `docs/listing/summary.txt` for the short summary field. Pick categories
+   **Map and Information** and **Utility & QoL**. Then, from your
+   CurseForge author profile's API Tokens page, generate an API token, and
+   note the numeric project id shown on the new project's page.
+
+3. **Add the secrets and variables.** In this repository's GitHub Settings,
+   under Secrets and variables, then Actions:
+   - Secrets: `MODRINTH_TOKEN` (the Modrinth PAT from step 1) and
+     `CURSEFORGE_TOKEN` (the CurseForge API token from step 2).
+   - Variables: `MODRINTH_PROJECT_ID` and `CURSEFORGE_PROJECT_ID` (the two
+     project ids noted above).
+
+   `publish.yml` skips a store cleanly, with no failure, if that store's
+   token secret is left unset, so the two stores can be brought online on
+   different schedules; nothing forces both to be ready at once.
+
+4. **Tag and push the release.**
+
+   ```bash
+   git tag v0.1.0
+   git push --tags
+   ```
+
+   The tag push triggers `publish.yml`, which runs `./gradlew build`, then
+   publishes the resulting JAR to Modrinth, CurseForge, and this
+   repository's GitHub Releases, with `docs/listing/changelog.md` as the
+   release notes.

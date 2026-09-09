@@ -1,0 +1,1 @@
+Pairs your Minecraft world with the Seedscout Android app: shares your seed and position, then draws in-game routes to the structures Seedscout found. Client-side only, QR-code pairing, no account or cloud.
