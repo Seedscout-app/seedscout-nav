@@ -5,6 +5,8 @@ name: Publish
 # Trigger: push a tag matching v* (see the Publishing section of README.md
 # for the full human runbook: creating the two store projects, minting the
 # two tokens, and setting the two repository variables this workflow reads).
+# The job can also be started from the Actions tab with a tag name, for
+# re-publishing after the tokens are added.
 #
 # Kir-Antipov/mc-publish was renamed upstream; the project now lives at
 # Kira-NT/mc-publish (same action, same maintainer, verified via the GitHub
@@ -20,6 +22,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to publish (for example v0.1.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -34,6 +42,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.tag || github.ref }}
 
       # Matches the Java toolchain build.gradle.kts actually targets
       # (options.release.set(25), sourceCompatibility/targetCompatibility
