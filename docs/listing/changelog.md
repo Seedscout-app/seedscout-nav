@@ -1,3 +1,15 @@
+# 0.1.1
+
+Released 2026-09-09
+
+## Fixed
+
+- The keybind category in Controls showed the raw translation key instead of Seedscout Nav
+
+## Added
+
+- Gallery screenshots for the store listings (no runtime change)
+
 # 0.1.0
 
 First published release of Seedscout Nav.
